@@ -80,4 +80,97 @@ Substitua por seu IPv4 (ex.: `"192.168.0.42"`).
 **Opções adicionais no código**:
 
 * `capture_loop(iface=None, bpf_filter=None)` — a função `sniff` aceita `iface` e `filter` para monitorar uma interface específica e aplicar filtros BPF (ex: `"tcp or udp"`).
-* Se preferir configurar via variável de ambiente ou endpoint, você pode adaptar o código para
+* Se preferir configurar via variável de ambiente ou endpoint, você pode adaptar o código para aceitar `SERVER_IP` por env var ou criar rota para atualizar em runtime.
+
+---
+
+## Como rodar
+
+**Linux / macOS (recomendado com sudo para permitir captura):**
+
+```bash
+sudo uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Windows:**
+
+* Abra o terminal como Administrador (importante) e rode:
+
+```powershell
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Observação:** Capturar pacotes exige privilégios especiais — no Linux normalmente `root`, no Windows execute como Administrador.
+
+---
+
+## Endpoints (exemplos)
+
+* `GET /` — health:
+
+```bash
+curl http://localhost:8000/
+# resposta:
+# {"message":"Backend (real capture) OK","time":... , "server_ip": "192.168.0.42"}
+```
+
+* `GET /traffic?limit=10` — top N clients:
+
+```bash
+curl "http://localhost:8000/traffic?limit=5"
+```
+
+Retorno JSON: `{ window, clients: [{ip, bytes_in, bytes_out, total, protocols}], generated_at }`
+
+* `GET /protocols` — breakdown por protocolo:
+
+```bash
+curl http://localhost:8000/protocols
+```
+
+* `GET /traffic_history?seconds=30` — histórico agregados dos últimos N segundos:
+
+```bash
+curl "http://localhost:8000/traffic_history?seconds=60"
+```
+
+---
+
+## Dicas de uso e tuning
+
+* **Interface específica:** se quiser monitorar apenas `eth0`/`en0`/`wlan0`, passe `iface="eth0"` ao chamar `sniff` (ou altere o thread starter para `threading.Thread(target=lambda: capture_loop(iface='eth0'), daemon=True).start()`).
+* **Filtro BPF:** reduza o volume com `filter="tcp or udp"` ou `filter="not arp"` conforme necessidade.
+* **Salvar/reativar estado:** o projeto atualmente mantém tudo em memória. Para persistência entre reinícios, adicione exportação para disco/BD.
+* **Proteção de dados sensíveis:** cuidado ao expor este dashboard em redes públicas — os IPs e volumes de tráfego podem ser sensíveis.
+
+---
+
+## Problemas comuns / Troubleshooting
+
+* **Scapy não captura no Windows:** verifique se o Npcap está instalado e o serviço ativo. Reinicie o computador se necessário.
+* **Permissão negada (Linux):** execute com `sudo` ou configure CAP_NET_RAW/ CAP_NET_ADMIN para o binário Python.
+* **Muito ruído no histórico:** considere aumentar a janela de `_maybe_append_snapshot` (atualmente 1 segundo) ou aplicar filtros BPF.
+
+---
+
+## Testes rápidos
+
+* Teste que o servidor responde:
+
+```bash
+curl http://localhost:8000/
+```
+
+* Gere tráfego local (ex.: ping) de outra máquina e verifique `/traffic` para ver o IP aparecendo.
+
+---
+
+## Observações finais
+
+* Este projeto foi escrito para ser simples e direto, focado em demonstrar captura de tráfego e integração com um frontend já existente. Adaptações comuns incluem persistência, autenticação nas rotas, paginação/filtragem avançada e integração com sistemas de métricas (Prometheus, Elastic, etc.).
+
+---
+
+## Licença
+
+Escolha a licença que preferir (ex.: MIT) e adicione um arquivo `LICENSE` se desejar publicar.
